@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/fold-week",
+      "schedule": "5 23 * * 0"
+    }
+  ]
+}

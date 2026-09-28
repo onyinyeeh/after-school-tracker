@@ -1,69 +1,73 @@
-import Image from "next/image";
+import bcrypt from "bcryptjs";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { getKids, getOrCreateCurrentWeek, getOrCreateFamily } from "@/lib/family";
+import {
+  buildWeekState,
+  getKidStats,
+  getPrizes,
+  getPrizesGiven,
+  getWeekHistory,
+  getWeekTasks,
+  getWithdrawalsForWeek,
+} from "@/lib/tracker-data";
+import { weekLabel } from "@/lib/calendar";
+import { currentClock } from "@/lib/clock";
+import { TrackerApp } from "@/components/TrackerApp";
+import type { TrackerInitialData } from "@/lib/tracker-types";
 
-export default function Home() {
-  return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
-  );
+export default async function HomePage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const family = await getOrCreateFamily(user.id);
+  const kids = await getKids(family.id);
+  const week = await getOrCreateCurrentWeek(family.id);
+
+  const kidIds = kids.map((k) => k.id);
+  const [tasks, stats, prizes, prizesGiven, withdrawals, history, pinIsDefault] = await Promise.all([
+    getWeekTasks(kidIds, week.week_start),
+    getKidStats(kidIds),
+    getPrizes(family.id),
+    getPrizesGiven(kidIds),
+    getWithdrawalsForWeek(week.id),
+    getWeekHistory(kidIds),
+    bcrypt.compare("1234", family.pin_hash),
+  ]);
+
+  const data: TrackerInitialData = {
+    familyId: family.id,
+    timezone: family.timezone,
+    pinIsDefault,
+    week: { id: week.id, weekStart: week.week_start, startDay: week.start_day, paidAt: week.paid_at },
+    weekRange: weekLabel(week.week_start),
+    clock: currentClock(family.timezone),
+    kids: kids.map((k) => ({
+      id: k.id,
+      name: k.name,
+      grade: k.grade,
+      color: k.color,
+      week: buildWeekState(week.week_start, tasks, k.id),
+      stats: stats[k.id],
+      prizesGiven: prizesGiven[k.id] ?? [],
+      withdrawal: (() => {
+        const w = withdrawals.find((w) => w.kid_id === k.id);
+        return w ? { id: w.id, amount: w.amount, paidAt: w.paid_at } : null;
+      })(),
+      history: (history[k.id] ?? []).map((h) => ({
+        id: h.id,
+        weekStart: h.week_start,
+        amount: h.amount,
+        bonus: h.bonus,
+        note: h.note,
+        paidLabel: h.paid_label,
+      })),
+    })),
+    prizes: prizes.map((p) => ({ id: p.id, days: p.days, text: p.text, sort: p.sort })),
+  };
+
+  return <TrackerApp data={data} />;
 }

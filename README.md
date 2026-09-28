@@ -1,36 +1,36 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# After-School Tracker
 
-## Getting Started
+A family app that pays two kids pocket money (in coins, 1 coin = ₦1) for completing an after-school routine, tracked as a shared-PC PWA. Ported from a design prototype — see the design handoff doc for the full spec (business rules, screens, design tokens) that this was built from.
 
-First, run the development server:
+## Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- Next.js 16 (App Router) + TypeScript + Tailwind v4
+- Supabase (Postgres + Auth), via `@supabase/ssr`
+- Vitest for the rules engine's unit tests
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## First-time setup
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. **Install deps** (already done if you're reading this from the scaffolded repo): `npm install`
+2. **Create a Supabase project** at [supabase.com](https://supabase.com) if you don't have one.
+3. **Run the schema**: open the project's SQL Editor and run `supabase/migration.sql` (or `supabase db push` if you have the CLI linked).
+4. **Environment variables**: copy `.env.local.example` to `.env.local` and fill in:
+   - `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Project Settings → API.
+   - `SUPABASE_SERVICE_ROLE_KEY` — same page, `service_role` secret (only needed to run the weekly cron fold job locally).
+   - `PIN_SESSION_SECRET` — any random string (`openssl rand -base64 32`); signs the short-lived "grown-up unlocked" cookie.
+   - `CRON_SECRET` — any random string; the weekly fold route rejects requests without `Authorization: Bearer <this>`.
+5. **PWA icons**: add `public/icon-192.png` and `public/icon-512.png` (a checkmark-on-gold-circle icon per the design tokens). The app builds and runs without them, but installs won't have a proper home-screen icon until they're added.
+6. `npm run dev` and open http://localhost:3000. First visit redirects to `/login` — enter your email, click the magic link it sends you. Signing in for the first time creates your family (default PIN `1234` — change it from Grown-up corner → Change PIN) and two default kids (edit their names from Grown-up corner → Edit names).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Scripts
 
-## Learn More
+- `npm run dev` / `npm run build` / `npm run start`
+- `npm run test` — runs `src/lib/rules.test.ts` (the business-rules engine)
+- `npm run lint`
 
-To learn more about Next.js, take a look at the following resources:
+## Architecture notes
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **`src/lib/rules.ts`** is the entire business-rules engine, ported 1:1 from the design prototype's logic class — pure functions, no I/O, fully unit-tested. This is the source of truth for streaks, coins, badges, levels, and prizes; read it before changing any of that logic.
+- **`src/lib/view-model.ts`** turns rules.ts output + raw kid/prize data into the plain objects the screen components render.
+- **`src/lib/actions/tracker.ts`** holds every Server Action. Every grown-up action (`markExplanation`, `markWeekPaid`, `fixTick`, `changePin`, `editKid`, `upsertPrize`, `markPrizeGiven`) re-checks a short-lived signed cookie (`src/lib/pin-session.ts`) set only after a server-side `bcrypt.compare` against the family's PIN hash — never trust client-side "unlocked" UI state for these.
+- **`src/app/api/cron/fold-week`** is the weekly rollover (Monday 00:05 WAT via `vercel.json`'s cron schedule) — folds a finished week into `kid_stats`/`week_history`. Idempotent via `weeks.folded_at`.
+- Auth is Supabase magic-link, parent-only; kids never sign in, they just pick a name on the "Who's checking in?" screen while the parent's browser session stays signed in.
