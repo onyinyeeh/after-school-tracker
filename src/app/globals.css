@@ -32,28 +32,30 @@
   --shadow-hard-sm: 0 2px 0 #1e2a44;
 }
 
-:root {
-  color-scheme: light;
-}
+@layer base {
+  :root {
+    color-scheme: light;
+  }
 
-body {
-  background: var(--color-paper);
-  color: var(--color-ink);
-  font-family: var(--font-body);
-  -webkit-tap-highlight-color: transparent;
-}
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-body);
+    -webkit-tap-highlight-color: transparent;
+  }
 
-input {
-  font: inherit;
-  color: inherit;
-}
+  input {
+    font: inherit;
+    color: inherit;
+  }
 
-button {
-  font: inherit;
-  cursor: pointer;
-  color: inherit;
-}
+  button {
+    font: inherit;
+    cursor: pointer;
+    color: inherit;
+  }
 
-button:disabled {
-  cursor: default;
+  button:disabled {
+    cursor: default;
+  }
 }
