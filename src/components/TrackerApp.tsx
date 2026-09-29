@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import {
   changePin,
   editKid,
@@ -50,6 +50,11 @@ export function TrackerApp({ data }: { data: TrackerInitialData }) {
   const [kidToast, setKidToast] = useState("");
   const [walletDay, setWalletDay] = useState<number | null>(null);
   const [withdrawConfirm, setWithdrawConfirm] = useState(false);
+
+  // Tracks in-flight Server Actions so tap targets can show instant feedback
+  // (disabled + dimmed) instead of feeling dead while the request — and the
+  // page-data revalidation that follows it — round-trips to Supabase.
+  const [actionPending, startAction] = useTransition();
 
   const [clock, setClock] = useState<Clock>(data.clock);
   const [weekendTimer, setWeekendTimer] = useState<{ kidId: string; secs: number; running: boolean } | null>(null);
@@ -157,17 +162,21 @@ export function TrackerApp({ data }: { data: TrackerInitialData }) {
 
   // ── Kid task actions ───────────────────────────────────────────────
 
-  async function handleTick(task: TaskKey) {
+  function handleTick(task: TaskKey) {
     if (!kid) return;
     const date = dateForDay(data.week.weekStart, clock.day);
-    await tickTask(kid.id, date, task, clock.min);
-    cheer(task === "study" ? "Nice! Now explain it" : "+50 coins!");
+    startAction(async () => {
+      await tickTask(kid.id, date, task, clock.min);
+      cheer(task === "study" ? "Nice! Now explain it" : "+50 coins!");
+    });
   }
 
-  async function handleUndoStudy() {
+  function handleUndoStudy() {
     if (!kid) return;
     const date = dateForDay(data.week.weekStart, clock.day);
-    await undoStudy(kid.id, date);
+    startAction(async () => {
+      await undoStudy(kid.id, date);
+    });
   }
 
   function startWeekendTimer() {
@@ -183,12 +192,14 @@ export function TrackerApp({ data }: { data: TrackerInitialData }) {
     if (secs != null) void saveWeekendStudySeconds(kid.id, dateForDay(data.week.weekStart, clock.day), secs);
   }
 
-  async function finishWeekend() {
+  function finishWeekend() {
     if (!kid) return;
     const secs = weekendTimer?.secs ?? (kid.week[clock.day] as { secs: number }).secs;
     setWeekendTimer((w) => (w ? { ...w, running: false } : w));
-    await finishWeekendStudy(kid.id, dateForDay(data.week.weekStart, clock.day), secs, clock.min);
-    cheer("2 hours! Now explain it");
+    startAction(async () => {
+      await finishWeekendStudy(kid.id, dateForDay(data.week.weekStart, clock.day), secs, clock.min);
+      cheer("2 hours! Now explain it");
+    });
   }
 
   // ── PIN-gated check flow ──────────────────────────────────────────
@@ -303,6 +314,7 @@ export function TrackerApp({ data }: { data: TrackerInitialData }) {
           clock={clock}
           paid={paid}
           kidToast={kidToast}
+          pending={actionPending}
           liveWeekendSecs={liveSecs}
           weekendRunning={weekendTimer?.kidId === kid.id && weekendTimer.running}
           onGoPick={goPick}

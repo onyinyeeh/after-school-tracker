@@ -13,6 +13,7 @@ export function KidToday({
   clock,
   paid,
   kidToast,
+  pending,
   liveWeekendSecs,
   weekendRunning,
   onGoPick,
@@ -28,6 +29,7 @@ export function KidToday({
   clock: Clock;
   paid: boolean;
   kidToast: string;
+  pending: boolean;
   liveWeekendSecs: number;
   weekendRunning: boolean;
   onGoPick: () => void;
@@ -75,7 +77,18 @@ export function KidToday({
             </div>
           )}
 
-          {isWeekend && <WeekendRing kid={kid} startDay={startDay} clock={clock} liveSecs={liveWeekendSecs} running={weekendRunning} onToggle={onToggleWeekendTimer} onFinish={onFinishWeekend} />}
+          {isWeekend && (
+            <WeekendRing
+              kid={kid}
+              startDay={startDay}
+              clock={clock}
+              liveSecs={liveWeekendSecs}
+              running={weekendRunning}
+              pending={pending}
+              onToggle={onToggleWeekendTimer}
+              onFinish={onFinishWeekend}
+            />
+          )}
         </div>
 
         <div className="flex min-w-0 flex-col gap-3.5">
@@ -85,7 +98,7 @@ export function KidToday({
                 <ClockIcon size={18} color="#5A6275" strokeWidth={2.2} />
                 4:30pm · Be home from school
               </div>
-              <TaskList kid={kid} startDay={startDay} clock={clock} onTick={onTickTask} onExplain={onExplain} onUndoStudy={onUndoStudy} />
+              <TaskList kid={kid} startDay={startDay} clock={clock} pending={pending} onTick={onTickTask} onExplain={onExplain} onUndoStudy={onUndoStudy} />
             </>
           ) : (
             <WeekendTiles kid={kid} startDay={startDay} clock={clock} />
@@ -129,6 +142,7 @@ function TaskList({
   kid,
   startDay,
   clock,
+  pending,
   onTick,
   onExplain,
   onUndoStudy,
@@ -136,6 +150,7 @@ function TaskList({
   kid: KidData;
   startDay: number;
   clock: Clock;
+  pending: boolean;
   onTick: (task: TaskKey) => void;
   onExplain: () => void;
   onUndoStudy: () => void;
@@ -201,8 +216,9 @@ function TaskList({
               )}
               <button
                 type="button"
+                disabled={pending}
                 onClick={() => onTick(t.key)}
-                className="min-h-[52px] rounded-2xl border-none bg-ink text-[17px] font-extrabold text-paper active:translate-y-0.5"
+                className="min-h-[52px] rounded-2xl border-none bg-ink text-[17px] font-extrabold text-paper active:translate-y-0.5 disabled:opacity-60"
               >
                 {t.actLabel}
               </button>
@@ -229,7 +245,12 @@ function TaskList({
                 <button type="button" onClick={onExplain} className="min-h-[52px] grow rounded-2xl border-none bg-ink text-base font-extrabold text-paper active:translate-y-0.5">
                   Get a grown-up to check
                 </button>
-                <button type="button" onClick={onUndoStudy} className="min-h-[52px] border-none bg-transparent px-3 text-sm font-extrabold underline">
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={onUndoStudy}
+                  className="min-h-[52px] border-none bg-transparent px-3 text-sm font-extrabold underline disabled:opacity-60"
+                >
                   Undo
                 </button>
               </div>
@@ -262,6 +283,7 @@ function WeekendRing({
   clock,
   liveSecs,
   running,
+  pending,
   onToggle,
   onFinish,
 }: {
@@ -270,6 +292,7 @@ function WeekendRing({
   clock: Clock;
   liveSecs: number;
   running: boolean;
+  pending: boolean;
   onToggle: () => void;
   onFinish: () => void;
 }) {
@@ -320,7 +343,12 @@ function WeekendRing({
           {running ? "Pause" : view.mins ? "Resume" : "Start"}
         </button>
         {view.canFinish ? (
-          <button type="button" onClick={onFinish} className="min-h-[52px] rounded-2xl border-none bg-ink text-base font-extrabold text-paper">
+          <button
+            type="button"
+            disabled={pending}
+            onClick={onFinish}
+            className="min-h-[52px] rounded-2xl border-none bg-ink text-base font-extrabold text-paper disabled:opacity-60"
+          >
             I&apos;m done
           </button>
         ) : (

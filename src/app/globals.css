@@ -53,9 +53,19 @@
     font: inherit;
     cursor: pointer;
     color: inherit;
+    /* Without this, iOS Safari (including installed home-screen apps) waits
+       ~300-500ms after every tap to see if a second tap is coming (for the
+       double-tap-to-zoom gesture) before firing the click — the exact "taps
+       feel slow / need repeated taps" symptom. This opts buttons out of
+       that wait while leaving pinch-to-zoom elsewhere on the page alone. */
+    touch-action: manipulation;
   }
 
   button:disabled {
     cursor: default;
+  }
+
+  a {
+    touch-action: manipulation;
   }
 }
