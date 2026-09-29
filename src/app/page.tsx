@@ -24,8 +24,10 @@ export default async function HomePage() {
   if (!user) redirect("/login");
 
   const family = await getOrCreateFamily(user.id);
-  const kids = await getKids(family.id);
-  const week = await getOrCreateCurrentWeek(family.id);
+  // getKids and getOrCreateCurrentWeek both only depend on family.id, not on
+  // each other — running them in parallel saves a full network round-trip
+  // to Supabase on every app open.
+  const [kids, week] = await Promise.all([getKids(family.id), getOrCreateCurrentWeek(family.id)]);
 
   const kidIds = kids.map((k) => k.id);
   const [tasks, stats, prizes, prizesGiven, withdrawals, history, pinIsDefault] = await Promise.all([
