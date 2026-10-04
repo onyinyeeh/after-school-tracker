@@ -79,9 +79,39 @@ describe("dayCoins()", () => {
   });
 
   it("weekend: 100 only if study is clear, else 0 (partial progress doesn't count)", () => {
-    expect(dayCoins({ secs: 3600, study: null, studyAt: null }, 5)).toBe(0);
-    expect(dayCoins({ secs: 7200, study: "clear", studyAt: 1150 }, 5)).toBe(100);
-    expect(dayCoins({ secs: 7200, study: "not", studyAt: 1150 }, 5)).toBe(0);
+    expect(dayCoins({ secs: 3600, study: null, studyAt: null, eve: null }, 5)).toBe(0);
+    expect(dayCoins({ secs: 7200, study: "clear", studyAt: 1150, eve: null }, 5)).toBe(100);
+    expect(dayCoins({ secs: 7200, study: "not", studyAt: 1150, eve: null }, 5)).toBe(0);
+  });
+
+  it("weekend: bedtime adds 50 on top of study, independently", () => {
+    expect(dayCoins({ secs: 0, study: null, studyAt: null, eve: "done" }, 5)).toBe(50);
+    expect(dayCoins({ secs: 7200, study: "clear", studyAt: 1150, eve: "done" }, 5)).toBe(150);
+  });
+});
+
+describe("status() weekend bedtime shares the weekday eve window", () => {
+  const startDay = 0;
+  const blankWeekend = { secs: 0, study: null, studyAt: null, eve: null } as const;
+
+  it("is locked before 8pm", () => {
+    expect(status(blankWeekend, 5, "eve", startDay, { day: 5, min: 1100 })).toBe("locked");
+  });
+
+  it("is now between 8pm and 10pm", () => {
+    expect(status(blankWeekend, 5, "eve", startDay, { day: 5, min: 1250 })).toBe("now");
+  });
+
+  it("is late between 10pm and the 10:10pm deadline", () => {
+    expect(status(blankWeekend, 6, "eve", startDay, { day: 6, min: 1325 })).toBe("late");
+  });
+
+  it("is missed at the shared 10:10pm deadline", () => {
+    expect(status(blankWeekend, 6, "eve", startDay, { day: 6, min: 1330 })).toBe("missed");
+  });
+
+  it("weekend study is still open-ended regardless of time", () => {
+    expect(status(blankWeekend, 5, "study", startDay, { day: 5, min: 1330 })).toBe("now");
   });
 });
 
@@ -292,10 +322,17 @@ describe("weekCounts()", () => {
 
   it("requires both weekend days clear for the weekend flag", () => {
     const week = blankWeek();
-    week[5] = { secs: 7200, study: "clear", studyAt: 1100 };
+    week[5] = { secs: 7200, study: "clear", studyAt: 1100, eve: null };
     expect(weekCounts(week).weekend).toBe(0);
-    week[6] = { secs: 7200, study: "clear", studyAt: 1100 };
+    week[6] = { secs: 7200, study: "clear", studyAt: 1100, eve: null };
     expect(weekCounts(week).weekend).toBe(1);
+  });
+
+  it("counts bedtime (the 'bed' badge stat) across all 7 days, weekends included", () => {
+    const week = blankWeek();
+    week[0] = { rest: null, restAt: null, study: null, studyAt: null, eve: "done" };
+    week[5] = { secs: 0, study: null, studyAt: null, eve: "done" };
+    expect(weekCounts(week).bed).toBe(2);
   });
 });
 

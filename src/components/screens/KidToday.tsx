@@ -2,7 +2,7 @@
 
 import { Check, X, Clock as ClockIcon, Hourglass } from "lucide-react";
 import { KidHeader } from "./KidHeader";
-import { statsCardView, weekdayTasksView, weekendRingView, weekendTilesView } from "@/lib/view-model";
+import { statsCardView, weekdayTasksView, weekendBedtimeView, weekendRingView, weekendTilesView } from "@/lib/view-model";
 import { DAYS } from "@/lib/calendar";
 import type { KidData } from "@/lib/tracker-types";
 import type { Clock, TaskKey } from "@/lib/rules";
@@ -58,7 +58,7 @@ export function KidToday({
         <div className="flex min-w-0 flex-col gap-3.5">
           <div className="flex flex-col gap-0.5">
             <h1 className="font-heading text-[32px] font-semibold">{DAYS[clock.day]}</h1>
-            <div className="text-base font-bold text-muted">{isWeekend ? "Weekend study day · study any time" : daySub}</div>
+            <div className="text-base font-bold text-muted">{isWeekend ? "Weekend study day · study any time, in bed by 10pm" : daySub}</div>
           </div>
 
           {!isWeekend && (
@@ -101,7 +101,10 @@ export function KidToday({
               <TaskList kid={kid} startDay={startDay} clock={clock} pending={pending} onTick={onTickTask} onExplain={onExplain} onUndoStudy={onUndoStudy} />
             </>
           ) : (
-            <WeekendTiles kid={kid} startDay={startDay} clock={clock} />
+            <>
+              <WeekendBedtime kid={kid} startDay={startDay} clock={clock} pending={pending} onTick={onTickTask} />
+              <WeekendTiles kid={kid} startDay={startDay} clock={clock} />
+            </>
           )}
         </div>
       </div>
@@ -358,6 +361,96 @@ function WeekendRing({
         )}
       </div>
       <div className="text-center text-sm font-bold text-muted">When you hit 2 hours, explain what you read. A clear explanation earns the 100 coins.</div>
+    </div>
+  );
+}
+
+function WeekendBedtime({
+  kid,
+  startDay,
+  clock,
+  pending,
+  onTick,
+}: {
+  kid: KidData;
+  startDay: number;
+  clock: Clock;
+  pending: boolean;
+  onTick: (task: TaskKey) => void;
+}) {
+  const t = weekendBedtimeView(kid, startDay, clock);
+
+  if (t.status === "done") {
+    return (
+      <div className="flex items-center gap-3.5 rounded-[20px] border-2 border-green bg-green-soft p-4">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-green">
+          <Check size={22} color="#FFFFFF" strokeWidth={3} />
+        </div>
+        <div className="flex min-w-0 grow flex-col">
+          <div className="text-[13px] font-bold text-green">
+            {t.range} · {t.note}
+          </div>
+          <div className="text-lg font-extrabold">{t.title}</div>
+        </div>
+        <div className="font-heading text-xl font-semibold text-green">+50</div>
+      </div>
+    );
+  }
+  if (t.status === "missed") {
+    return (
+      <div className="flex items-center gap-3.5 rounded-[20px] border-2 border-red bg-red-soft p-4">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 border-red bg-card">
+          <X size={18} color="#B3362A" strokeWidth={3} />
+        </div>
+        <div className="flex min-w-0 grow flex-col">
+          <div className="text-[13px] font-bold text-red">
+            {t.range} · {t.note}
+          </div>
+          <div className="text-lg font-extrabold">{t.title}</div>
+        </div>
+        <div className="font-heading text-xl font-semibold text-red">0</div>
+      </div>
+    );
+  }
+  if (t.status === "now" || t.status === "late") {
+    return (
+      <div className="flex items-center gap-3.5 rounded-[20px] border-[2.5px] border-ink bg-card p-4">
+        <div className="flex min-w-0 grow flex-col gap-0.5">
+          <div className="flex items-center gap-2">
+            <div className="text-[13px] font-bold text-muted">{t.range}</div>
+            {t.isLate ? (
+              <div className="rounded-full bg-red-soft px-2 py-0.5 text-xs font-extrabold text-red">LATE</div>
+            ) : (
+              <div className="rounded-full bg-gold px-2 py-0.5 text-xs font-extrabold">+50</div>
+            )}
+          </div>
+          <div className="text-lg font-extrabold">{t.title}</div>
+          {t.isLate && <div className="text-xs font-bold text-muted">{t.note}</div>}
+        </div>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => onTick("eve")}
+          className="min-h-11 whitespace-nowrap rounded-2xl border-none bg-ink px-4 text-sm font-extrabold text-paper disabled:opacity-60"
+        >
+          {t.actLabel}
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-3.5 rounded-[20px] bg-sand p-4">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-line">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5A6275" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+          <rect x="5" y="11" width="14" height="10" rx="2" />
+          <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+        </svg>
+      </div>
+      <div className="flex min-w-0 grow flex-col">
+        <div className="text-[13px] font-bold text-muted">{t.range}</div>
+        <div className="text-[17px] font-extrabold">{t.title}</div>
+      </div>
+      <div className="whitespace-nowrap text-[13px] font-bold text-muted">{t.note}</div>
     </div>
   );
 }

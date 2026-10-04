@@ -138,6 +138,27 @@ export function weekendRingView(kid: KidData, day: number, startDay: number, clo
   };
 }
 
+/** Weekend bedtime — same 8pm-10pm window (and 10:10pm grace) as the weekday "eve" task, for today's weekend day. */
+export function weekendBedtimeView(kid: KidData, startDay: number, clock: Clock) {
+  const rec = kid.week[clock.day] as WeekendRecord;
+  const st = status(rec, clock.day, "eve", startDay, clock);
+  const [open, close] = WEEKDAY_WINDOWS.eve;
+  let note = "";
+  if (st === "done") note = "Done";
+  if (st === "missed") note = "Missed — past 10:10pm";
+  if (st === "locked") note = "Opens " + fmtTime(open).replace(":00", "");
+  if (st === "late") note = "Past " + fmtTime(close).replace(":00", "") + " — still counts till 10:10pm";
+  return {
+    status: st,
+    isLate: st === "late",
+    range: fmtWindowRange(open, close),
+    title: "In bed by 10pm",
+    sub: "Tick once you're in bed",
+    note,
+    actLabel: "I'm in bed",
+  };
+}
+
 export function weekendTilesView(kid: KidData, startDay: number, clock: Clock) {
   const lbl: Record<string, string> = { done: "Explained · +100", waiting: "Waiting for check" };
   return [5, 6].map((d) => {
@@ -254,7 +275,7 @@ export function walletView(
 
   const bars = [0, 1, 2, 3, 4, 5, 6].map((d) => {
     const c = dayCoins(kid.week[d], d);
-    const max = d < 5 ? 150 : 100;
+    const max = 150;
     const future = d > clock.day;
     const before = d < startDay && c === 0;
     return {
@@ -266,7 +287,14 @@ export function walletView(
     };
   });
 
-  const dayRows = (selDay < 5 ? TASKS.map((t) => [t.key, t.title, 50] as [TaskKey, string, number]) : [["study", "2 hours of study", 100] as [TaskKey, string, number]]).map(
+  const dayRows = (
+    selDay < 5
+      ? TASKS.map((t) => [t.key, t.title, 50] as [TaskKey, string, number])
+      : ([
+          ["study", "2 hours of study", 100],
+          ["eve", "In bed by 10pm", 50],
+        ] as [TaskKey, string, number][])
+  ).map(
     ([key, title, pts]) => {
       const st = status(kid.week[selDay], selDay, key, startDay, clock);
       const labelMap: Record<string, [string, string]> = {
@@ -372,7 +400,12 @@ const FIX_TASK_STATUS_LABEL: Record<string, string> = {
 
 export function fixRowsView(kids: KidData[], startDay: number, clock: Clock) {
   const isWeekend = clock.day >= 5;
-  const keys: [TaskKey, string][] = isWeekend ? [["study", "2 hours of study"]] : TASKS.map((t) => [t.key, t.title]);
+  const keys: [TaskKey, string][] = isWeekend
+    ? [
+        ["study", "2 hours of study"],
+        ["eve", "In bed by 10pm"],
+      ]
+    : TASKS.map((t) => [t.key, t.title]);
   const rows: { kidId: string; kidColor: string; kidInitial: string; label: string; statusLabel: string; actLabel: string; task: TaskKey; on: boolean }[] = [];
   for (const kid of kids) {
     const rec = kid.week[clock.day] as WeekdayRecord;

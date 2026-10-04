@@ -50,6 +50,9 @@ export function buildWeekState(weekStart: string, tasks: DayTaskRow[], kidId: st
       rec.study = (t.status as WeekendRecord["study"]) ?? null;
       rec.studyAt = t.done_at_min;
       rec.secs = t.study_secs;
+    } else if (t.task === "eve") {
+      const rec = week[day] as WeekendRecord;
+      rec.eve = t.status === "done" ? "done" : null;
     }
   }
   return week;

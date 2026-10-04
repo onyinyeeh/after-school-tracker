@@ -25,6 +25,8 @@ export type WeekendRecord = {
   secs: number;
   study: "clear" | "not" | "finished" | null;
   studyAt: number | null;
+  /** Weekend bedtime — same 8pm-10pm window (and 10:10pm grace) as the weekday "eve" task. */
+  eve: "done" | null;
 };
 
 export type DayRecord = WeekdayRecord | WeekendRecord;
@@ -87,7 +89,7 @@ export function blankWeek(): WeekState {
   return Array.from({ length: 7 }, (_, d): DayRecord =>
     d < 5
       ? { rest: null, restAt: null, study: null, studyAt: null, eve: null }
-      : { secs: 0, study: null, studyAt: null }
+      : { secs: 0, study: null, studyAt: null, eve: null }
   );
 }
 
@@ -106,7 +108,10 @@ export function status(
   if (day < startDay) return "skip";
   if (day < clock.day) return "missed";
   if (day > clock.day) return "locked";
-  if (day >= 5) return "now";
+  // Weekend study has no time window ("study any time"); weekend bedtime
+  // (key "eve") shares the exact same 8pm-10pm(-10:10pm grace) window as
+  // the weekday bedtime task, resolved by the same logic below.
+  if (day >= 5 && key === "study") return "now";
   const [open, close] = WEEKDAY_WINDOWS[key];
   if (clock.min < open) return "locked";
   if (clock.min >= WEEKDAY_FINAL_DEADLINE) return "missed";
@@ -117,7 +122,8 @@ export function status(
 /** Coins earned for a day's record so far (weekday = up to 150, weekend = 0 or 100). */
 export function dayCoins(rec: DayRecord, day: number): number {
   if (day >= 5) {
-    return (rec as WeekendRecord).study === "clear" ? 100 : 0;
+    const r = rec as WeekendRecord;
+    return (r.study === "clear" ? 100 : 0) + (r.eve === "done" ? 50 : 0);
   }
   const r = rec as WeekdayRecord;
   return (r.rest === "done" ? 50 : 0) + (r.study === "clear" ? 50 : 0) + (r.eve === "done" ? 50 : 0);
@@ -185,7 +191,7 @@ export function weekCounts(week: WeekState): WeekCounts {
       return r.rest === "done" && r.restAt != null && r.restAt < 1020;
     }).length,
     clear: week.filter((r) => (r as WeekdayRecord | WeekendRecord).study === "clear").length,
-    bed: wd.filter((d) => (week[d] as WeekdayRecord).eve === "done").length,
+    bed: week.filter((r) => (r as WeekdayRecord | WeekendRecord).eve === "done").length,
     weekend: (week[5] as WeekendRecord).study === "clear" && (week[6] as WeekendRecord).study === "clear" ? 1 : 0,
     zero: [0, 1, 2, 3].reduce((a, d) => {
       const r = week[d] as WeekdayRecord;
