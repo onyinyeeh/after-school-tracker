@@ -20,7 +20,7 @@ import {
 } from "@/lib/actions/tracker";
 import { currentClock } from "@/lib/clock";
 import { dateForDay } from "@/lib/view-model";
-import type { Clock, TaskKey } from "@/lib/rules";
+import { readyToCollect, summary, type Clock, type TaskKey } from "@/lib/rules";
 import type { TrackerInitialData } from "@/lib/tracker-types";
 import { PickScreen } from "@/components/screens/PickScreen";
 import { PinPad } from "@/components/screens/PinPad";
@@ -229,9 +229,10 @@ export function TrackerApp({ data }: { data: TrackerInitialData }) {
 
   async function handleRequestWithdraw() {
     if (!kid) return;
-    const sm = summaryTotalFor(kid);
+    const sm = summary(kid.week, data.week.startDay, clock);
+    const amount = readyToCollect(kid.stats, sm.total, paid, payOpenTime);
     setWithdrawConfirm(false);
-    await requestWithdraw(kid.id, data.week.id, sm);
+    await requestWithdraw(kid.id, data.week.id, amount);
   }
 
   // ── Parent corner ──────────────────────────────────────────────────
@@ -419,21 +420,6 @@ function fmtNow(min: number) {
   const ap = h >= 12 ? "pm" : "am";
   h = h % 12 || 12;
   return `${h}:${String(m).padStart(2, "0")}${ap}`;
-}
-
-function summaryTotalFor(kid: TrackerInitialData["kids"][number]): number {
-  // Recomputed defensively — TrackerApp always has this via view-model in
-  // the screens themselves; kept local/minimal here to avoid a circular import.
-  let total = 0;
-  for (let d = 0; d < 5; d++) {
-    const r = kid.week[d] as { rest: string | null; study: string | null; eve: string | null };
-    total += (r.rest === "done" ? 50 : 0) + (r.study === "clear" ? 50 : 0) + (r.eve === "done" ? 50 : 0);
-  }
-  for (const d of [5, 6]) {
-    const r = kid.week[d] as { study: string | null };
-    total += r.study === "clear" ? 100 : 0;
-  }
-  return total;
 }
 
 function weekPendingCount(kid: TrackerInitialData["kids"][number]): number {

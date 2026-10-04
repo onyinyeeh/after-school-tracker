@@ -238,10 +238,29 @@ export type KidStats = {
   /** Streak shields available (max 2), earned by winning the weekly challenge. */
   shields: number;
   challenges: number;
+  /** Total coins ever earned, across every week, whether paid out or not. Never decreases. */
+  lifetimeEarned: number;
+  /** Total coins ever actually paid out. Never decreases. */
+  lifetimeWithdrawn: number;
+  /** Coins earned in closed weeks that were never paid — still owed, still collectible any time. */
+  carryUnpaid: number;
 };
 
 export function zeroStats(): KidStats {
-  return { early: 0, clear: 0, bed: 0, perfect: 0, weekend: 0, best: 0, carry: 0, shields: 0, challenges: 0 };
+  return {
+    early: 0,
+    clear: 0,
+    bed: 0,
+    perfect: 0,
+    weekend: 0,
+    best: 0,
+    carry: 0,
+    shields: 0,
+    challenges: 0,
+    lifetimeEarned: 0,
+    lifetimeWithdrawn: 0,
+    carryUnpaid: 0,
+  };
 }
 
 /**
@@ -273,9 +292,17 @@ export function liveStreak(week: WeekState, stats: KidStats, startDay: number, c
  * Folds a finished week into a kid's lifetime stats — run by the weekly
  * cron (Monday 00:05) against the week that just ended. `clock` is fixed to
  * end-of-week so every day is resolved as done/missed rather than
- * locked/now.
+ * locked/now. `weekWasPaid` tells it whether the week's earnings were
+ * already paid out before the fold ran — if not, they carry forward into
+ * `carryUnpaid` instead of being lost.
  */
-export function foldKidStats(prev: KidStats, week: WeekState, weekStartIso: string, startDay: number): KidStats {
+export function foldKidStats(
+  prev: KidStats,
+  week: WeekState,
+  weekStartIso: string,
+  startDay: number,
+  weekWasPaid: boolean
+): KidStats {
   const endOfWeek: Clock = { day: 7, min: 0 };
   const wc = weekCounts(week);
   const ls = liveStreak(week, prev, startDay, endOfWeek);
@@ -291,7 +318,27 @@ export function foldKidStats(prev: KidStats, week: WeekState, weekStartIso: stri
     carry: ls.cur,
     shields: Math.min(2, ls.shieldsLeft + (cp.done ? 1 : 0)),
     challenges: prev.challenges + (cp.done ? 1 : 0),
+    lifetimeEarned: prev.lifetimeEarned + sm.total,
+    lifetimeWithdrawn: prev.lifetimeWithdrawn,
+    carryUnpaid: prev.carryUnpaid + (weekWasPaid ? 0 : sm.total),
   };
+}
+
+/**
+ * How much is available to collect right now: any carried-over unpaid
+ * balance from past (closed) weeks, plus this week's earnings once they've
+ * unlocked (Sunday 8pm, per the usual payday rhythm) and haven't been paid
+ * yet. Carried-over balances are always collectible, any day — that's what
+ * stops a missed payday from becoming a permanent loss.
+ */
+export function readyToCollect(stats: KidStats, currentWeekTotal: number, currentWeekPaid: boolean, currentWeekUnlocked: boolean): number {
+  if (currentWeekPaid) return stats.carryUnpaid;
+  return stats.carryUnpaid + (currentWeekUnlocked ? currentWeekTotal : 0);
+}
+
+/** Records a payout of exactly `paidAmount` (from readyToCollect) — clears the carried balance and adds to the lifetime-withdrawn total. */
+export function settlePayment(stats: KidStats, paidAmount: number): KidStats {
+  return { ...stats, carryUnpaid: 0, lifetimeWithdrawn: stats.lifetimeWithdrawn + paidAmount };
 }
 
 export type BadgeTotals = {

@@ -18,6 +18,7 @@ import {
   liveStreak,
   liveTotals,
   prizeUnlocked,
+  readyToCollect,
   status,
   summary,
   weekCounts,
@@ -246,8 +247,10 @@ export function walletView(
 ) {
   const sm = summary(kid.week, startDay, clock);
   const selDay = walletDay ?? clock.day;
-  const withdrawnFromHistory = kid.history.reduce((a, h) => a + h.amount, 0);
   const requested = !!kid.withdrawal;
+  // Carried-over unpaid balances are collectible any time; this week's
+  // earnings join them once they unlock (Sunday 8pm) — see readyToCollect().
+  const ready = readyToCollect(kid.stats, sm.total, paid, payOpenTime);
 
   const bars = [0, 1, 2, 3, 4, 5, 6].map((d) => {
     const c = dayCoins(kid.week[d], d);
@@ -283,12 +286,15 @@ export function walletView(
   );
 
   return {
-    ready: naira(paid ? 0 : sm.total),
-    earned: naira(withdrawnFromHistory + (paid ? 0 : sm.total)),
-    withdrawn: naira(withdrawnFromHistory),
-    locked: !paid && !payOpenTime,
-    open: !paid && payOpenTime && !requested,
-    requested: !paid && payOpenTime && requested,
+    ready: naira(ready),
+    // lifetimeEarned/lifetimeWithdrawn are folded/settled totals from past
+    // weeks; the current (not-yet-folded) week's running total is added on
+    // top so the figures are accurate as of right now.
+    earned: naira(kid.stats.lifetimeEarned + sm.total),
+    withdrawn: naira(kid.stats.lifetimeWithdrawn),
+    locked: !paid && ready === 0,
+    open: !paid && ready > 0 && !requested,
+    requested: !paid && ready > 0 && requested,
     paid,
     bars,
     weekTotal: naira(sm.total),
@@ -389,13 +395,16 @@ export function fixRowsView(kids: KidData[], startDay: number, clock: Clock) {
   return rows;
 }
 
-export function payoutView(kids: KidData[], startDay: number, clock: Clock, paid: boolean) {
+export function payoutView(kids: KidData[], startDay: number, clock: Clock, paid: boolean, payOpenTime: boolean) {
+  let totalReady = 0;
   const rows = kids.map((kid) => {
     const sm = summary(kid.week, startDay, clock);
-    return { name: kid.name, amountLabel: naira(sm.total) + (paid ? " paid" : kid.withdrawal ? " · asked" : " so far") };
+    const ready = readyToCollect(kid.stats, sm.total, paid, payOpenTime);
+    totalReady += ready;
+    const suffix = paid ? " paid" : kid.withdrawal ? " · asked" : kid.stats.carryUnpaid > 0 ? " · includes carried balance" : " so far";
+    return { name: kid.name, amountLabel: naira(ready) + suffix };
   });
-  const total = naira(kids.reduce((a, kid) => a + summary(kid.week, startDay, clock).total, 0));
-  return { rows, total };
+  return { rows, total: naira(totalReady), totalAmount: totalReady };
 }
 
 /** Re-exported for convenience so screens don't need two imports for common bits. */

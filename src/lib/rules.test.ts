@@ -10,6 +10,8 @@ import {
   levelForCoins,
   liveStreak,
   prizeUnlocked,
+  readyToCollect,
+  settlePayment,
   status,
   summary,
   weekCounts,
@@ -154,15 +156,69 @@ describe("liveStreak() shield consumption", () => {
 describe("foldKidStats() weekly rollover", () => {
   it("carries best-ever streak forward across weeks even after the streak resets", () => {
     const week1 = fullWeek([0, 1, 2, 3, 4]); // full week, streak of 5
-    const afterWeek1 = foldKidStats(zeroStats(), week1, "2026-09-14", 0);
+    const afterWeek1 = foldKidStats(zeroStats(), week1, "2026-09-14", 0, true);
     expect(afterWeek1.best).toBe(5);
     expect(afterWeek1.carry).toBe(5);
 
     // Week 2: Monday is left blank (never ticked) — folded at end-of-week it resolves to "missed".
     const week2 = blankWeek();
-    const afterWeek2 = foldKidStats({ ...afterWeek1, shields: 0 }, week2, "2026-09-21", 0);
+    const afterWeek2 = foldKidStats({ ...afterWeek1, shields: 0 }, week2, "2026-09-21", 0, true);
     expect(afterWeek2.carry).toBe(0);
     expect(afterWeek2.best).toBe(5); // best-ever is preserved
+  });
+
+  it("adds every week's earnings to lifetimeEarned regardless of payment status", () => {
+    const week1 = fullWeek([0, 1, 2, 3, 4]); // 5 full weekdays + 200 bonus = 950
+    const paid = foldKidStats(zeroStats(), week1, "2026-09-14", 0, true);
+    const unpaid = foldKidStats(zeroStats(), week1, "2026-09-14", 0, false);
+    expect(paid.lifetimeEarned).toBe(950);
+    expect(unpaid.lifetimeEarned).toBe(950);
+  });
+
+  it("carries a week's earnings into carryUnpaid when it closes without being paid, instead of losing them", () => {
+    const week1 = fullWeek([0, 1, 2, 3, 4]); // 950 total
+    const afterUnpaidWeek = foldKidStats(zeroStats(), week1, "2026-09-14", 0, false);
+    expect(afterUnpaidWeek.carryUnpaid).toBe(950);
+
+    // A second unpaid week keeps accumulating rather than overwriting.
+    const week2 = fullWeek([0, 1, 2, 3, 4]);
+    const afterTwoUnpaidWeeks = foldKidStats(afterUnpaidWeek, week2, "2026-09-21", 0, false);
+    expect(afterTwoUnpaidWeeks.carryUnpaid).toBe(1900);
+  });
+
+  it("does not add to carryUnpaid when the week was paid before folding", () => {
+    const week1 = fullWeek([0, 1, 2, 3, 4]);
+    const afterPaidWeek = foldKidStats(zeroStats(), week1, "2026-09-14", 0, true);
+    expect(afterPaidWeek.carryUnpaid).toBe(0);
+  });
+});
+
+describe("readyToCollect() and settlePayment()", () => {
+  it("is 0 with no carry and the current week not yet unlocked (before Sunday 8pm)", () => {
+    const stats = zeroStats();
+    expect(readyToCollect(stats, 500, false, false)).toBe(0);
+  });
+
+  it("includes the current week's total once it's unlocked", () => {
+    const stats = zeroStats();
+    expect(readyToCollect(stats, 500, false, true)).toBe(500);
+  });
+
+  it("makes a carried-over balance collectible immediately, even before the current week unlocks", () => {
+    const stats = { ...zeroStats(), carryUnpaid: 950 };
+    expect(readyToCollect(stats, 500, false, false)).toBe(950);
+  });
+
+  it("adds carry and the unlocked current week together", () => {
+    const stats = { ...zeroStats(), carryUnpaid: 950 };
+    expect(readyToCollect(stats, 500, false, true)).toBe(1450);
+  });
+
+  it("settlePayment clears the carried balance and adds the paid amount to lifetimeWithdrawn", () => {
+    const stats = { ...zeroStats(), carryUnpaid: 950, lifetimeWithdrawn: 1150 };
+    const next = settlePayment(stats, 950);
+    expect(next.carryUnpaid).toBe(0);
+    expect(next.lifetimeWithdrawn).toBe(2100);
   });
 });
 

@@ -51,7 +51,7 @@ export function ParentCorner({
   const checks = parentChecksView(kids);
   const pending = checks.filter((c) => c.status === "finished");
   const prizeDue = prizesDueView(kids, prizes, startDay, clock);
-  const payout = payoutView(kids, startDay, clock, paid);
+  const payout = payoutView(kids, startDay, clock, paid, payOpenTime);
   const fixRows = fixRowsView(kids, startDay, clock);
 
   return (
@@ -166,12 +166,12 @@ export function ParentCorner({
               <span className="font-extrabold">{paid ? "You paid" : "You'll pay"}</span>
               <span className="font-heading text-[26px] font-semibold text-gold">{payout.total}</span>
             </div>
-            {!paid && !payOpenTime && (
+            {!paid && payout.totalAmount === 0 && (
               <button type="button" disabled className="min-h-[50px] rounded-2xl border-2 border-dashed border-grey bg-transparent text-[15px] font-extrabold text-soft">
-                Mark as paid · opens Sunday 8pm
+                {payOpenTime ? "Nothing to pay yet" : "Nothing owed yet · opens Sunday 8pm"}
               </button>
             )}
-            {!paid && payOpenTime && (
+            {!paid && payout.totalAmount > 0 && (
               <button type="button" onClick={onMarkPaid} className="min-h-[50px] rounded-2xl border-none bg-gold text-base font-extrabold text-ink">
                 Mark {payout.total} as paid
               </button>

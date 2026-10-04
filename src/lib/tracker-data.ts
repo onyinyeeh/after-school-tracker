@@ -75,6 +75,9 @@ export async function getKidStats(kidIds: string[]): Promise<Record<string, KidS
       carry: row.carry_streak,
       shields: row.shields,
       challenges: row.challenges_won,
+      lifetimeEarned: row.lifetime_earned,
+      lifetimeWithdrawn: row.lifetime_withdrawn,
+      carryUnpaid: row.carry_unpaid,
     };
   }
   return out;
@@ -124,7 +127,13 @@ export async function getWithdrawalsForWeek(weekId: string): Promise<WithdrawalR
   return data ?? [];
 }
 
-export async function getWeekHistory(kidIds: string[], limit = 8): Promise<Record<string, WeekHistoryRow[]>> {
+/**
+ * Full week-by-week history is kept forever in the DB; this just caps how
+ * far back the Wallet tab shows at once (lifetime totals use kid_stats'
+ * dedicated counters, not this query, so they're accurate regardless of
+ * this limit).
+ */
+export async function getWeekHistory(kidIds: string[], limit = 104): Promise<Record<string, WeekHistoryRow[]>> {
   const out: Record<string, WeekHistoryRow[]> = {};
   for (const id of kidIds) out[id] = [];
   if (kidIds.length === 0) return out;

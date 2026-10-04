@@ -22,7 +22,7 @@ export async function GET(request: Request) {
 
   const { data: weeks, error } = await supabase
     .from("weeks")
-    .select("id, family_id, week_start, start_day")
+    .select("id, family_id, week_start, start_day, paid_at")
     .is("folded_at", null)
     .lt("week_start", currentWeekStart);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -54,10 +54,14 @@ export async function GET(request: Request) {
             carry: statsRow.carry_streak,
             shields: statsRow.shields,
             challenges: statsRow.challenges_won,
+            lifetimeEarned: statsRow.lifetime_earned,
+            lifetimeWithdrawn: statsRow.lifetime_withdrawn,
+            carryUnpaid: statsRow.carry_unpaid,
           }
         : zeroStats();
 
-      const next = foldKidStats(prevStats, weekState, week.week_start, week.start_day);
+      const weekWasPaid = !!week.paid_at;
+      const next = foldKidStats(prevStats, weekState, week.week_start, week.start_day, weekWasPaid);
 
       await supabase.from("kid_stats").upsert({
         kid_id: kid.id,
@@ -70,10 +74,16 @@ export async function GET(request: Request) {
         carry_streak: next.carry,
         shields: next.shields,
         challenges_won: next.challenges,
+        lifetime_earned: next.lifetimeEarned,
+        lifetime_withdrawn: next.lifetimeWithdrawn,
+        carry_unpaid: next.carryUnpaid,
         updated_at: new Date().toISOString(),
       });
 
       const sm = summary(weekState, week.start_day, { day: 7, min: 0 });
+      const paidLabel = weekWasPaid
+        ? `Paid ${new Date(week.paid_at!).toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short" })}`
+        : "Not marked paid — carried to next payout";
       await supabase.from("week_history").insert({
         kid_id: kid.id,
         week_start: week.week_start,
@@ -86,7 +96,7 @@ export async function GET(request: Request) {
             : sm.partial
               ? "First week"
               : "No streak bonus",
-        paid_label: "Not marked paid",
+        paid_label: paidLabel,
       });
 
       kidWeeksFolded++;
