@@ -9,7 +9,7 @@ import {
   lockGrownUp,
   markExplanation,
   markPrizeGiven,
-  markWeekPaid,
+  confirmWithdrawal,
   requestWithdraw,
   saveWeekendStudySeconds,
   tickTask,
@@ -19,8 +19,8 @@ import {
   verifyPin,
 } from "@/lib/actions/tracker";
 import { currentClock } from "@/lib/clock";
-import { dateForDay } from "@/lib/view-model";
-import { readyToCollect, summary, type Clock, type TaskKey } from "@/lib/rules";
+import { dateForDay, isKidPaid } from "@/lib/view-model";
+import { isPayWindowOpen, readyToCollect, summary, type Clock, type TaskKey } from "@/lib/rules";
 import type { TrackerInitialData } from "@/lib/tracker-types";
 import { PickScreen } from "@/components/screens/PickScreen";
 import { PinPad } from "@/components/screens/PinPad";
@@ -29,9 +29,10 @@ import { StreakTab } from "@/components/screens/StreakTab";
 import { WalletTab } from "@/components/screens/WalletTab";
 import { CheckScreen } from "@/components/screens/CheckScreen";
 import { ParentCorner } from "@/components/screens/ParentCorner";
+import { WithdrawalScreen } from "@/components/screens/WithdrawalScreen";
 import { DAYS, MONTHS } from "@/lib/calendar";
 
-type Screen = "pick" | "kid" | "pin" | "check" | "parent";
+type Screen = "pick" | "kid" | "pin" | "check" | "parent" | "withdraw";
 type Tab = "today" | "streak" | "wallet";
 type PinReturn = "parent" | "check";
 
@@ -230,7 +231,7 @@ export function TrackerApp({ data }: { data: TrackerInitialData }) {
   async function handleRequestWithdraw() {
     if (!kid) return;
     const sm = summary(kid.week, data.week.startDay, clock);
-    const amount = readyToCollect(kid.stats, sm.total, paid, payOpenTime);
+    const amount = readyToCollect(kid.stats, sm.total, isKidPaid(kid, paid), payOpenTime);
     setWithdrawConfirm(false);
     await requestWithdraw(kid.id, data.week.id, amount);
   }
@@ -251,9 +252,10 @@ export function TrackerApp({ data }: { data: TrackerInitialData }) {
     const k = data.kids.find((x) => x.id === kId);
     setToast(`Gave ${k?.name ?? "kid"} their prize`);
   }
-  async function handleMarkPaid() {
-    await markWeekPaid(data.week.id);
-    setToast(`Paid ${data.kids.map((k) => k.name).join(" and ")}`);
+  async function handleConfirmWithdrawal(kId: string, kidInitials: string, parentInitials: string) {
+    await confirmWithdrawal(kId, data.week.id, kidInitials, parentInitials);
+    const k = data.kids.find((x) => x.id === kId);
+    setToast(`Withdrawal confirmed for ${k?.name ?? "kid"}`);
   }
   async function handleFixTick(kId: string, task: TaskKey, on: boolean) {
     const date = dateForDay(data.week.weekStart, clock.day);
@@ -282,7 +284,7 @@ export function TrackerApp({ data }: { data: TrackerInitialData }) {
   }
 
   const paid = !!data.week.paidAt;
-  const payOpenTime = clock.day === 6 && clock.min >= 1200;
+  const payOpenTime = isPayWindowOpen(clock);
   const checkForRec = checkFor ? data.kids.find((k) => k.id === checkFor.kidId) : null;
   const checkStudyStatus = checkForRec ? (checkForRec.week[checkFor!.day] as { study: "finished" | "clear" | "not" | null }).study : null;
   const checkStudyAt = checkForRec ? (checkForRec.week[checkFor!.day] as { studyAt: number | null }).studyAt : null;
@@ -313,7 +315,7 @@ export function TrackerApp({ data }: { data: TrackerInitialData }) {
           kid={kid}
           startDay={data.week.startDay}
           clock={clock}
-          paid={paid}
+          paid={isKidPaid(kid, paid)}
           kidToast={kidToast}
           pending={actionPending}
           liveWeekendSecs={liveSecs}
@@ -336,7 +338,7 @@ export function TrackerApp({ data }: { data: TrackerInitialData }) {
           clock={clock}
           prizes={data.prizes}
           withdrawnTotal={kid.history.reduce((a, h) => a + h.amount, 0)}
-          paid={paid}
+          paid={isKidPaid(kid, paid)}
           onGoPick={goPick}
           onTab={setTab}
         />
@@ -348,7 +350,7 @@ export function TrackerApp({ data }: { data: TrackerInitialData }) {
           weekStartIso={data.week.weekStart}
           startDay={data.week.startDay}
           clock={clock}
-          paid={paid}
+          paid={isKidPaid(kid, paid)}
           payOpenTime={payOpenTime}
           walletDay={walletDay}
           withdrawConfirm={withdrawConfirm}
@@ -389,6 +391,19 @@ export function TrackerApp({ data }: { data: TrackerInitialData }) {
         />
       )}
 
+      {screen === "withdraw" && (
+        <WithdrawalScreen
+          kids={data.kids}
+          startDay={data.week.startDay}
+          clock={clock}
+          paid={paid}
+          payOpenTime={payOpenTime}
+          toast={toast}
+          onBack={() => setScreen("parent")}
+          onConfirm={handleConfirmWithdrawal}
+        />
+      )}
+
       {screen === "parent" && (
         <ParentCorner
           kids={data.kids}
@@ -403,7 +418,7 @@ export function TrackerApp({ data }: { data: TrackerInitialData }) {
           onMarkNotClear={handleMarkNotClear}
           onUndoCheck={handleUndoCheck}
           onGivePrize={handleGivePrize}
-          onMarkPaid={handleMarkPaid}
+          onOpenWithdrawals={() => setScreen("withdraw")}
           onFixTick={handleFixTick}
           onChangePin={handleChangePinRequest}
           onEditKid={handleEditKid}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isPayWindowOpen,
   badgeProgress,
   badgeTier,
   blankWeek,
@@ -346,5 +347,17 @@ describe("dayState()", () => {
     const rec = { rest: "done" as const, restAt: 1000, study: "not" as const, studyAt: 1150, eve: null };
     const clock: Clock = { day: 0, min: 1300 };
     expect(dayState(rec, 0, 0, clock)).toBe("missed");
+  });
+});
+
+describe("isPayWindowOpen", () => {
+  it("opens Sunday 8:00pm and stays open through 11:59pm", () => {
+    expect(isPayWindowOpen({ day: 6, min: 1199 })).toBe(false);
+    expect(isPayWindowOpen({ day: 6, min: 1200 })).toBe(true);
+    expect(isPayWindowOpen({ day: 6, min: 1439 })).toBe(true);
+  });
+  it("is closed on every other day", () => {
+    expect(isPayWindowOpen({ day: 0, min: 1300 })).toBe(false);
+    expect(isPayWindowOpen({ day: 5, min: 1300 })).toBe(false);
   });
 });

@@ -9,6 +9,8 @@ export type KidData = {
   stats: KidStats;
   prizesGiven: string[];
   withdrawal: { id: string; amount: number; paidAt: string | null } | null;
+  /** Every settled withdrawal, newest first — kept forever, independent of the weekly rollover. */
+  withdrawalLog: { id: string; amount: number; paidAt: string; kidInitials: string | null; parentInitials: string | null }[];
   history: { id: string; weekStart: string; amount: number; bonus: boolean; note: string; paidLabel: string }[];
 };
 

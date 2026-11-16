@@ -60,7 +60,17 @@ export async function GET(request: Request) {
           }
         : zeroStats();
 
-      const weekWasPaid = !!week.paid_at;
+      // Paid per kid: a confirmed withdrawal for this kid and week (or the legacy whole-week paid flag).
+      const { data: paidRows } = await supabase
+        .from("withdrawals")
+        .select("paid_at")
+        .eq("kid_id", kid.id)
+        .eq("week_id", week.id)
+        .not("paid_at", "is", null)
+        .order("paid_at", { ascending: false })
+        .limit(1);
+      const paidAtValue = paidRows?.[0]?.paid_at ?? week.paid_at;
+      const weekWasPaid = !!paidAtValue;
       const next = foldKidStats(prevStats, weekState, week.week_start, week.start_day, weekWasPaid);
 
       await supabase.from("kid_stats").upsert({
@@ -82,7 +92,7 @@ export async function GET(request: Request) {
 
       const sm = summary(weekState, week.start_day, { day: 7, min: 0 });
       const paidLabel = weekWasPaid
-        ? `Paid ${new Date(week.paid_at!).toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short" })}`
+        ? `Paid ${new Date(paidAtValue!).toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short" })}`
         : "Not marked paid — carried to next payout";
       await supabase.from("week_history").insert({
         kid_id: kid.id,

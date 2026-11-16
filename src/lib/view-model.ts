@@ -29,6 +29,11 @@ import {
 } from "@/lib/rules";
 import type { KidData, PrizeData } from "@/lib/tracker-types";
 
+/** A kid is paid for the week once their withdrawal has been confirmed (or the whole week was legacy-marked paid). */
+export function isKidPaid(kid: KidData, weekPaid: boolean): boolean {
+  return weekPaid || !!kid.withdrawal?.paidAt;
+}
+
 export function initialOf(name: string): string {
   return (name.replace(/[^A-Za-z]/g, "")[0] || "?").toUpperCase();
 }
@@ -258,6 +263,16 @@ export function streakView(
   };
 }
 
+/** Settled withdrawals, newest first: amount, when, and who signed. */
+export function withdrawalLogView(kid: KidData) {
+  return kid.withdrawalLog.map((w) => ({
+    id: w.id,
+    amountLabel: naira(w.amount),
+    whenLabel: new Date(w.paidAt).toLocaleString("en-US", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }),
+    signedLabel: w.kidInitials && w.parentInitials ? `Signed ${w.kidInitials} · ${w.parentInitials}` : "Not signed",
+  }));
+}
+
 export function walletView(
   kid: KidData,
   startDay: number,
@@ -333,6 +348,7 @@ export function walletView(
     bonusBg: sm.bonus ? "#1F7A4D" : sm.fail >= 0 && !sm.partial ? "#FBE6E2" : "#F1EADB",
     bonusColor: sm.bonus ? "#FFFFFF" : sm.fail >= 0 && !sm.partial ? "#B3362A" : "#1E2A44",
     history: kid.history.map((h) => ({ ...h, amountLabel: naira(h.amount) })),
+    withdrawalLog: withdrawalLogView(kid),
   };
 }
 
@@ -432,12 +448,13 @@ export function payoutView(kids: KidData[], startDay: number, clock: Clock, paid
   let totalReady = 0;
   const rows = kids.map((kid) => {
     const sm = summary(kid.week, startDay, clock);
-    const ready = readyToCollect(kid.stats, sm.total, paid, payOpenTime);
+    const kidPaid = isKidPaid(kid, paid);
+    const ready = readyToCollect(kid.stats, sm.total, kidPaid, payOpenTime);
     totalReady += ready;
-    const suffix = paid ? " paid" : kid.withdrawal ? " · asked" : kid.stats.carryUnpaid > 0 ? " · includes carried balance" : " so far";
+    const suffix = kidPaid ? " paid" : kid.withdrawal ? " · asked" : kid.stats.carryUnpaid > 0 ? " · includes carried balance" : " so far";
     return { name: kid.name, amountLabel: naira(ready) + suffix };
   });
-  return { rows, total: naira(totalReady), totalAmount: totalReady };
+  return { rows, total: naira(totalReady), totalAmount: totalReady, allPaid: kids.length > 0 && kids.every((k) => isKidPaid(k, paid)) };
 }
 
 /** Re-exported for convenience so screens don't need two imports for common bits. */

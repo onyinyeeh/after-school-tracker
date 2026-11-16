@@ -9,6 +9,7 @@ import {
   getPrizesGiven,
   getWeekHistory,
   getWeekTasks,
+  getWithdrawalLog,
   getWithdrawalsForWeek,
 } from "@/lib/tracker-data";
 import { weekLabel } from "@/lib/calendar";
@@ -30,12 +31,13 @@ export default async function HomePage() {
   const [kids, week] = await Promise.all([getKids(family.id), getOrCreateCurrentWeek(family.id)]);
 
   const kidIds = kids.map((k) => k.id);
-  const [tasks, stats, prizes, prizesGiven, withdrawals, history, pinIsDefault] = await Promise.all([
+  const [tasks, stats, prizes, prizesGiven, withdrawals, withdrawalLog, history, pinIsDefault] = await Promise.all([
     getWeekTasks(kidIds, week.week_start),
     getKidStats(kidIds),
     getPrizes(family.id),
     getPrizesGiven(kidIds),
     getWithdrawalsForWeek(week.id),
+    getWithdrawalLog(kidIds),
     getWeekHistory(kidIds),
     bcrypt.compare("1234", family.pin_hash),
   ]);
@@ -59,6 +61,13 @@ export default async function HomePage() {
         const w = withdrawals.find((w) => w.kid_id === k.id);
         return w ? { id: w.id, amount: w.amount, paidAt: w.paid_at } : null;
       })(),
+      withdrawalLog: (withdrawalLog[k.id] ?? []).map((w) => ({
+        id: w.id,
+        amount: w.amount,
+        paidAt: w.paid_at,
+        kidInitials: w.kid_initials,
+        parentInitials: w.parent_initials,
+      })),
       history: (history[k.id] ?? []).map((h) => ({
         id: h.id,
         weekStart: h.week_start,

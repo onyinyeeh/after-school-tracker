@@ -22,7 +22,7 @@ export function ParentCorner({
   onMarkNotClear,
   onUndoCheck,
   onGivePrize,
-  onMarkPaid,
+  onOpenWithdrawals,
   onFixTick,
   onChangePin,
   onEditKid,
@@ -40,7 +40,7 @@ export function ParentCorner({
   onMarkNotClear: (kidId: string, day: number, task: "study" | "weekend_study") => void;
   onUndoCheck: (kidId: string, day: number, task: "study" | "weekend_study") => void;
   onGivePrize: (kidId: string, prizeId: string) => void;
-  onMarkPaid: () => void;
+  onOpenWithdrawals: () => void;
   onFixTick: (kidId: string, task: TaskKey, on: boolean) => void;
   onChangePin: () => void;
   onEditKid: (kidId: string, patch: { name?: string; grade?: string }) => void;
@@ -154,7 +154,7 @@ export function ParentCorner({
 
         <div className="flex min-w-0 flex-col gap-3.5">
           <div className="flex flex-col gap-2.5 rounded-[22px] bg-ink p-4 text-paper">
-            <div className="text-[17px] font-extrabold">Sunday payout</div>
+            <div className="text-[17px] font-extrabold">Sunday withdrawals</div>
             {payout.rows.map((r, i) => (
               <div key={i} className="flex justify-between gap-2 font-bold">
                 <span>{r.name}</span>
@@ -163,20 +163,12 @@ export function ParentCorner({
             ))}
             <div className="h-[1.5px] bg-darkline" />
             <div className="flex items-baseline justify-between">
-              <span className="font-extrabold">{paid ? "You paid" : "You'll pay"}</span>
+              <span className="font-extrabold">{payout.allPaid ? "Paid this week" : "You'll pay"}</span>
               <span className="font-heading text-[26px] font-semibold text-gold">{payout.total}</span>
             </div>
-            {!paid && payout.totalAmount === 0 && (
-              <button type="button" disabled className="min-h-[50px] rounded-2xl border-2 border-dashed border-grey bg-transparent text-[15px] font-extrabold text-soft">
-                {payOpenTime ? "Nothing to pay yet" : "Nothing owed yet · opens Sunday 8pm"}
-              </button>
-            )}
-            {!paid && payout.totalAmount > 0 && (
-              <button type="button" onClick={onMarkPaid} className="min-h-[50px] rounded-2xl border-none bg-gold text-base font-extrabold text-ink">
-                Mark {payout.total} as paid
-              </button>
-            )}
-            {paid && <div className="flex min-h-[50px] items-center justify-center rounded-2xl border-2 border-darkline text-[15px] font-extrabold">Paid ✓ · new week starts Monday</div>}
+            <button type="button" onClick={onOpenWithdrawals} className="min-h-[50px] rounded-2xl border-none bg-gold text-base font-extrabold text-ink">
+              {payout.totalAmount > 0 ? `Open withdrawals · ${payout.total}` : "Open withdrawals & history"}
+            </button>
           </div>
 
           <div className="grid grid-cols-2 gap-2">

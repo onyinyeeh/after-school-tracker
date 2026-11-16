@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, X, Lock } from "lucide-react";
-import { pickCardView } from "@/lib/view-model";
+import { isKidPaid, pickCardView } from "@/lib/view-model";
 import type { KidData } from "@/lib/tracker-types";
 import type { Clock } from "@/lib/rules";
 
@@ -33,7 +33,7 @@ export function PickScreen({
 
       <div className="grid gap-5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 360px), 1fr))" }}>
         {kids.map((kid) => {
-          const view = pickCardView(kid, startDay, clock, paid);
+          const view = pickCardView(kid, startDay, clock, isKidPaid(kid, paid));
           return (
             <button
               key={kid.id}

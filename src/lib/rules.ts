@@ -330,6 +330,12 @@ export function foldKidStats(
   };
 }
 
+/** This week's earnings can be withdrawn from Sunday 8:00pm until the end of Sunday (11:59pm). */
+export const PAY_OPEN_MIN = 1200;
+export function isPayWindowOpen(clock: Clock): boolean {
+  return clock.day === 6 && clock.min >= PAY_OPEN_MIN && clock.min < 1440;
+}
+
 /**
  * How much is available to collect right now: any carried-over unpaid
  * balance from past (closed) weeks, plus this week's earnings once they've

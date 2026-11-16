@@ -150,10 +150,28 @@ export function WalletTab({
           </div>
 
           <div className="flex flex-col gap-2.5">
-            <div className="px-1 text-[15px] font-extrabold">History</div>
+            <div className="px-1 text-[15px] font-extrabold">Withdrawals</div>
+            {v.withdrawalLog.length === 0 && (
+              <div className="rounded-2xl border-2 border-dashed border-line p-3 text-[13px] font-bold text-muted">
+                Every withdrawal you make is saved here.
+              </div>
+            )}
+            {v.withdrawalLog.map((w) => (
+              <div key={w.id} className="flex items-center gap-3 rounded-2xl border-[1.5px] border-line bg-card p-4">
+                <div className="flex grow flex-col">
+                  <div className="font-extrabold">{w.whenLabel}</div>
+                  <div className="text-[13px] font-bold text-muted">{w.signedLabel}</div>
+                </div>
+                <div className="font-heading text-xl font-semibold">{w.amountLabel}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-col gap-2.5">
+            <div className="px-1 text-[15px] font-extrabold">Weekly history</div>
             {v.history.length === 0 && (
               <div className="rounded-2xl border-2 border-dashed border-line p-3 text-[13px] font-bold text-muted">
-                Every Sunday payout gets saved here.
+                Each finished week is saved here on Monday.
               </div>
             )}
             {v.history.map((h) => (

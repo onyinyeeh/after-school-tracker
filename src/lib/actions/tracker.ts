@@ -7,7 +7,7 @@ import { getKids, getOrCreateFamily } from "@/lib/family";
 import { buildWeekState, getKidStats, getWeekTasks } from "@/lib/tracker-data";
 import { grantPinUnlock, hasPinUnlock, revokePinUnlock } from "@/lib/pin-session";
 import { currentClock } from "@/lib/clock";
-import { readyToCollect, settlePayment, summary, type TaskKey } from "@/lib/rules";
+import { isPayWindowOpen, readyToCollect, settlePayment, summary, type TaskKey } from "@/lib/rules";
 
 async function requireFamily() {
   const supabase = await createClient();
@@ -132,56 +132,59 @@ export async function fixTick(
 }
 
 /**
- * Settles every kid's ready-to-collect balance for this week — any carried
- * forward unpaid amount from past weeks plus this week's earnings, once
- * they've unlocked (Sunday 8pm). The carried balance is always included
- * regardless of day, which is what lets a grown-up catch up on a missed
- * payday without that week's coins having been lost.
+ * Confirms one kid's withdrawal, signed with initials by the kid and the
+ * grown-up. Settles that kid's ready-to-collect balance: any carried
+ * forward unpaid amount from past weeks plus this week's earnings while the
+ * Sunday 8pm-11:59pm window is open. Safe to call twice: a kid who is
+ * already paid for the week is left alone.
  */
-export async function markWeekPaid(weekId: string) {
+export async function confirmWithdrawal(kidId: string, weekId: string, kidInitials: string, parentInitials: string) {
   const { supabase, family } = await requireFamily();
   await requirePinUnlocked(family.id);
 
+  const kidSign = kidInitials.trim().toUpperCase().slice(0, 4);
+  const parentSign = parentInitials.trim().toUpperCase().slice(0, 4);
+  if (!kidSign || !parentSign) throw new Error("Both sets of initials are needed.");
+
   const { data: week, error: weekError } = await supabase
     .from("weeks")
-    .select("id, week_start, start_day, paid_at")
+    .select("id, week_start, start_day")
     .eq("id", weekId)
     .eq("family_id", family.id)
     .single();
   if (weekError || !week) throw new Error(weekError?.message ?? "Week not found.");
 
   const kids = await getKids(family.id);
-  const kidIds = kids.map((k) => k.id);
-  const [tasks, statsByKid] = await Promise.all([getWeekTasks(kidIds, week.week_start), getKidStats(kidIds)]);
+  if (!kids.some((k) => k.id === kidId)) throw new Error("Kid not found.");
 
+  const { data: existing, error: existingErr } = await supabase
+    .from("withdrawals")
+    .select("id, paid_at")
+    .eq("kid_id", kidId)
+    .eq("week_id", weekId);
+  if (existingErr) throw new Error(existingErr.message);
+  if (existing?.some((w) => w.paid_at)) return;
+
+  const [tasks, statsByKid] = await Promise.all([getWeekTasks([kidId], week.week_start), getKidStats([kidId])]);
   const clock = currentClock(family.timezone);
-  const payOpenTime = clock.day === 6 && clock.min >= 1200;
+  const stats = statsByKid[kidId];
+  const sm = summary(buildWeekState(week.week_start, tasks, kidId), week.start_day, clock);
+  const paidAmount = readyToCollect(stats, sm.total, false, isPayWindowOpen(clock));
+  if (paidAmount <= 0) throw new Error("Nothing to withdraw right now.");
+
   const paidAt = new Date().toISOString();
+  const next = settlePayment(stats, paidAmount);
+  const { error: statsErr } = await supabase
+    .from("kid_stats")
+    .upsert({ kid_id: kidId, carry_unpaid: next.carryUnpaid, lifetime_withdrawn: next.lifetimeWithdrawn, updated_at: paidAt });
+  if (statsErr) throw new Error(statsErr.message);
 
-  for (const kid of kids) {
-    const weekState = buildWeekState(week.week_start, tasks, kid.id);
-    const sm = summary(weekState, week.start_day, clock);
-    const stats = statsByKid[kid.id];
-    const paidAmount = readyToCollect(stats, sm.total, false, payOpenTime);
-    if (paidAmount <= 0) continue;
-
-    const next = settlePayment(stats, paidAmount);
-    const { error: statsErr } = await supabase
-      .from("kid_stats")
-      .upsert({ kid_id: kid.id, carry_unpaid: next.carryUnpaid, lifetime_withdrawn: next.lifetimeWithdrawn, updated_at: paidAt });
-    if (statsErr) throw new Error(statsErr.message);
-
-    const { error: withdrawErr } = await supabase
-      .from("withdrawals")
-      .insert({ kid_id: kid.id, week_id: weekId, amount: paidAmount, requested_at: paidAt, paid_at: paidAt });
-    if (withdrawErr) throw new Error(withdrawErr.message);
-  }
-
-  // Any earlier pending request rows for this week are now settled by the
-  // rows above — close them out too so they don't show as "still waiting".
-  await supabase.from("withdrawals").update({ paid_at: paidAt }).eq("week_id", weekId).is("paid_at", null);
-
-  const { error } = await supabase.from("weeks").update({ paid_at: paidAt }).eq("id", weekId);
+  const signed = { amount: paidAmount, paid_at: paidAt, kid_initials: kidSign, parent_initials: parentSign };
+  // Close out the kid's pending request for this week if there is one, otherwise record a fresh row.
+  const pending = existing?.[0];
+  const { error } = pending
+    ? await supabase.from("withdrawals").update(signed).eq("id", pending.id)
+    : await supabase.from("withdrawals").insert({ kid_id: kidId, week_id: weekId, requested_at: paidAt, ...signed });
   if (error) throw new Error(error.message);
 
   revalidatePath("/");

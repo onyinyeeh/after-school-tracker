@@ -88,6 +88,14 @@ export async function getKidStats(kidIds: string[]): Promise<Record<string, KidS
 
 export type PrizeRow = { id: string; days: number; text: string; sort: number };
 export type WithdrawalRow = { id: string; kid_id: string; week_id: string; amount: number; paid_at: string | null };
+export type WithdrawalLogRow = {
+  id: string;
+  kid_id: string;
+  amount: number;
+  paid_at: string;
+  kid_initials: string | null;
+  parent_initials: string | null;
+};
 export type WeekHistoryRow = {
   id: string;
   kid_id: string;
@@ -128,6 +136,24 @@ export async function getWithdrawalsForWeek(weekId: string): Promise<WithdrawalR
     .eq("week_id", weekId);
   if (error) throw new Error(error.message);
   return data ?? [];
+}
+
+/** Every settled withdrawal for these kids, newest first. Read straight from `withdrawals`, so it is visible the moment it is confirmed. */
+export async function getWithdrawalLog(kidIds: string[], limit = 200): Promise<Record<string, WithdrawalLogRow[]>> {
+  const out: Record<string, WithdrawalLogRow[]> = {};
+  for (const id of kidIds) out[id] = [];
+  if (kidIds.length === 0) return out;
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("withdrawals")
+    .select("id, kid_id, amount, paid_at, kid_initials, parent_initials")
+    .in("kid_id", kidIds)
+    .not("paid_at", "is", null)
+    .order("paid_at", { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  for (const row of (data ?? []) as WithdrawalLogRow[]) out[row.kid_id]?.push(row);
+  return out;
 }
 
 /**
